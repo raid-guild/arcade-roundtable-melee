@@ -24,6 +24,7 @@ export type GameConfig = {
   readonly attackDamage: number;
   readonly attackCooldownMs: number;
   readonly attackActiveMs: number;
+  readonly maxInputMessagesPerSecond: number;
   readonly attackRange: number;
   readonly attackWidth: number;
   readonly knockbackDistance: number;

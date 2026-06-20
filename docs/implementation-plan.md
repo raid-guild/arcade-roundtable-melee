@@ -261,7 +261,11 @@ rates later, but v1 only needs the constants to be easy to change.
 
 Use Drizzle/Postgres, following the existing arcade module style.
 
-`players`
+Roundtable Melee will reuse the shared arcade Postgres database used by other
+Raid Guild arcade modules. To avoid collisions, every table owned by this app
+must use the `melee_` prefix.
+
+`melee_players`
 
 - `id`: internal UUID.
 - `portal_user_id`: durable Portal user id.
@@ -272,7 +276,7 @@ Use Drizzle/Postgres, following the existing arcade module style.
 - `created_at`.
 - `last_seen_at`.
 
-`roundtable_matches`
+`melee_matches`
 
 - `id`: internal UUID.
 - `status`: final status, usually `completed` or `ended_early`.
@@ -285,7 +289,7 @@ Use Drizzle/Postgres, following the existing arcade module style.
 - `ended_at`.
 - `created_at`.
 
-`roundtable_match_players`
+`melee_match_players`
 
 - `id`: internal UUID.
 - `match_id`.
@@ -303,7 +307,7 @@ Use Drizzle/Postgres, following the existing arcade module style.
 
 Optional future table:
 
-- `roundtable_match_events` for replay/debug/audit, not required for v1.
+- `melee_match_events` for replay/debug/audit, not required for v1.
 
 Because v1 persists only at match end, the realtime server can keep live state
 in memory and write one match row plus final participant rows when the match
@@ -622,11 +626,10 @@ During lobby, leaderboard can show joined players and selected characters.
 
 `/admin`
 
-- Optional v1 route if controls feel too crowded on `/`.
-- Member-only.
-- Start current game.
-- End current game early.
-- Show active match status.
+- Deferred for v1.
+- V1 uses member-only in-game websocket controls for start/end.
+- Add a separate member-only admin route later only if Portal operators need a
+  control surface outside the play screen.
 
 `/launch-error`
 
@@ -639,8 +642,7 @@ HTTP routes:
 
 - `GET /api/session`
 - `GET /api/game/socket-token`
-- `POST /api/admin/game/start`
-- `POST /api/admin/game/end`
+- `GET /api/game/config`
 - `GET /portal/callback`
 - `GET /api/auth/callback`
 
@@ -778,8 +780,9 @@ Current status:
   overlay exists, and recent match results are available at `/results` and
   `/api/matches/recent`.
 - Phase 8 is in progress: health bars, disconnected-freeze visuals, hit/score
-  popups, impact flashes, directional attack effects, and reconnect status are
-  in place; richer audio and larger multiplayer soak testing remain.
+  popups, impact flashes, crunchy arcade sound cues, directional attack effects,
+  reconnect status, and a socket bot harness are in place; larger multiplayer
+  soak testing remains.
 
 Current implementation notes from the June 20, 2026 review:
 
@@ -799,26 +802,30 @@ Current implementation notes from the June 20, 2026 review:
   write succeeds.
 - Character selection is gated to `lobby` and `running` so idle players see the
   waiting/status overlay first.
+- Persistence is namespaced for reuse of the shared arcade database:
+  `melee_players`, `melee_matches`, and `melee_match_players`.
+- V1 uses the in-game websocket start/end controls instead of a separate
+  `/admin` page or admin HTTP routes.
+- The current migration is the pre-deploy baseline. No rename migration is
+  needed because the app has not yet been deployed against the shared arcade DB.
+- Runtime gameplay config is exposed at `GET /api/game/config`, and server-side
+  UI reads from the same env-aware config parser as the websocket server.
+- Current melee slash/swipe overlays are accepted for V1 playtesting; attack
+  pose art can be revisited after multiplayer feedback.
+- Crunchy arcade-style sound effects are implemented with a lightweight
+  WebAudio synth and an in-game sound toggle.
+- A socket bot harness is available through `npm run bots` for local multiplayer
+  smoke/soak testing.
+- Server input handling now rejects stale input sequence numbers and coalesces
+  excessive input floods with a configurable `MAX_INPUT_MESSAGES_PER_SECOND`.
+- Reconnect polish now distinguishes connecting/rejoining states and displays a
+  short rejoined-current-match notice after recovery.
+- Thaw and chest-break visual effects are implemented.
 
 Remaining implementation work:
 
-- Decide whether to add the planned `/admin` page and
-  `POST /api/admin/game/start` / `POST /api/admin/game/end` routes or update the
-  plan to standardize on the current websocket-driven start/end controls.
-- Expose runtime server config to client UI if deployed env overrides should be
-  visible outside snapshots. The home screen currently reads shared defaults.
-- Add explicit input sequencing/rate-limit handling. Clients send `seq`, but the
-  server currently accepts the latest sanitized input without stale-input
-  rejection.
-- Add richer reconnect polish: clearer user-facing reconnect states, explicit
-  reclaimed-session messaging, and timeout behavior after final results expire.
-- Add sound effects.
-- Add thaw and chest-break effects. Existing polish covers health bars,
-  hit/score popups, impact flashes, and directional attack arcs.
-- Revisit melee art direction. Runtime directional slash/swipe arcs are present,
-  but the source art review still notes some attack poses read as ranged/bow
-  attacks rather than melee strikes.
-- Test multiple local clients, then run a 10-player soak test.
+- Run the socket bot harness against local dev, then do a human multiplayer
+  playtest. Tune bot behavior if it fails to surface useful load issues.
 - Verify deployed Railway behavior with real Portal signed launch, websocket
   upgrade, migrations, match completion, and result persistence.
 - Refactor for maintainability when v1 behavior stabilizes: the plan's
@@ -846,7 +853,7 @@ Remaining implementation work:
 
 ### Phase 3: Admin Match Lifecycle
 
-- Add member-only start/end routes.
+- Add member-only start/end controls.
 - Allow any Portal member to start a match.
 - Allow only the starting member to end that active match early.
 - Add 15-second configurable lobby countdown.
@@ -902,16 +909,16 @@ Remaining implementation work:
 
 ### Phase 8: Polish And Hardening
 
-- Add sound effects.
-- Add hit flashes, health bars, thaw effects, chest break effects. Partially
-  complete: health bars, score popups, and damage flashes are in.
+- Add crunchy arcade sound effects. Complete.
+- Add hit flashes, health bars, thaw effects, chest break effects. Complete.
 - Replace debug attack hitbox visuals with character attack poses and directional
   slash/swipe effects. Complete.
 - Keep explicit hitbox rendering behind a debug flag such as
   `NEXT_PUBLIC_SHOW_HITBOXES=true`. Complete.
 - Add short impact flashes when attacks connect. Complete.
-- Add reconnect polish. Partially complete: disconnected players freeze with a
-  distinct visual state and clients reconnect automatically.
+- Add reconnect polish. Complete for v1: disconnected players freeze with a
+  distinct visual state, clients reconnect automatically, and recovery notices
+  are shown.
 - Test with multiple local clients.
 - Test up to 10 connected players.
 - Verify deployment with Portal launch callback.

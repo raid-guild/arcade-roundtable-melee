@@ -8,7 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const players = pgTable("players", {
+export const players = pgTable("melee_players", {
   id: uuid("id").primaryKey().defaultRandom(),
   portalUserId: text("portal_user_id").unique().notNull(),
   portalProfileId: text("portal_profile_id"),
@@ -20,7 +20,7 @@ export const players = pgTable("players", {
 });
 
 export const roundtableMatches = pgTable(
-  "roundtable_matches",
+  "melee_matches",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     status: text("status").notNull(),
@@ -34,13 +34,13 @@ export const roundtableMatches = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [
-    index("roundtable_matches_status_idx").on(t.status),
-    index("roundtable_matches_ended_at_idx").on(t.endedAt),
+    index("melee_matches_status_idx").on(t.status),
+    index("melee_matches_ended_at_idx").on(t.endedAt),
   ]
 );
 
 export const roundtableMatchPlayers = pgTable(
-  "roundtable_match_players",
+  "melee_match_players",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     matchId: uuid("match_id")
@@ -61,7 +61,7 @@ export const roundtableMatchPlayers = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true }),
   },
   (t) => [
-    index("roundtable_match_players_match_idx").on(t.matchId),
-    index("roundtable_match_players_score_idx").on(t.score),
+    index("melee_match_players_match_idx").on(t.matchId),
+    index("melee_match_players_score_idx").on(t.score),
   ]
 );

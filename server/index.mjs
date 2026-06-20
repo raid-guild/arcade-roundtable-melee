@@ -4,7 +4,7 @@ import next from "next";
 import postgres from "postgres";
 import { jwtVerify } from "jose";
 import { WebSocketServer } from "ws";
-import { CHARACTER_IDS, DEFAULT_GAME_CONFIG } from "../game/shared/config-values.mjs";
+import { buildGameConfig, CHARACTER_IDS } from "../game/shared/config-values.mjs";
 
 const { loadEnvConfig } = nextEnv;
 
@@ -14,35 +14,7 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = Number(process.env.PORT || 3000);
 
-const CONFIG = {
-  ...DEFAULT_GAME_CONFIG,
-  lobbyCountdownSeconds: envNumber("LOBBY_COUNTDOWN_SECONDS", DEFAULT_GAME_CONFIG.lobbyCountdownSeconds),
-  matchDurationSeconds: envNumber("MATCH_DURATION_SECONDS", DEFAULT_GAME_CONFIG.matchDurationSeconds),
-  finalResultsSeconds: envNumber("FINAL_RESULTS_SECONDS", DEFAULT_GAME_CONFIG.finalResultsSeconds),
-  maxPlayers: envNumber("MAX_PLAYERS", DEFAULT_GAME_CONFIG.maxPlayers),
-  freezeSeconds: envNumber("FREEZE_SECONDS", DEFAULT_GAME_CONFIG.freezeSeconds),
-  playerMaxHealth: envNumber("PLAYER_MAX_HEALTH", DEFAULT_GAME_CONFIG.playerMaxHealth),
-  playerSpeed: envNumber("PLAYER_SPEED", DEFAULT_GAME_CONFIG.playerSpeed),
-  hamHealAmount: envNumber("HAM_HEAL_AMOUNT", DEFAULT_GAME_CONFIG.hamHealAmount),
-  slayScore: envNumber("SLAY_SCORE", DEFAULT_GAME_CONFIG.slayScore),
-  deathScore: envNumber("DEATH_SCORE", DEFAULT_GAME_CONFIG.deathScore),
-  chestScore: envNumber("CHEST_SCORE", DEFAULT_GAME_CONFIG.chestScore),
-  hamSpawnMinSeconds: envNumber("HAM_SPAWN_MIN_SECONDS", DEFAULT_GAME_CONFIG.hamSpawnMinSeconds),
-  hamSpawnMaxSeconds: envNumber("HAM_SPAWN_MAX_SECONDS", DEFAULT_GAME_CONFIG.hamSpawnMaxSeconds),
-  maxActiveHams: envNumber("MAX_ACTIVE_HAMS", DEFAULT_GAME_CONFIG.maxActiveHams),
-  chestSpawnMinSeconds: envNumber("CHEST_SPAWN_MIN_SECONDS", DEFAULT_GAME_CONFIG.chestSpawnMinSeconds),
-  chestSpawnMaxSeconds: envNumber("CHEST_SPAWN_MAX_SECONDS", DEFAULT_GAME_CONFIG.chestSpawnMaxSeconds),
-  maxActiveChests: envNumber("MAX_ACTIVE_CHESTS", DEFAULT_GAME_CONFIG.maxActiveChests),
-  chestMinHits: envNumber("CHEST_MIN_HITS", DEFAULT_GAME_CONFIG.chestMinHits),
-  chestMaxHits: envNumber("CHEST_MAX_HITS", DEFAULT_GAME_CONFIG.chestMaxHits),
-  attackDamage: envNumber("ATTACK_DAMAGE", DEFAULT_GAME_CONFIG.attackDamage),
-  attackCooldownMs: envNumber("ATTACK_COOLDOWN_MS", DEFAULT_GAME_CONFIG.attackCooldownMs),
-  attackActiveMs: envNumber("ATTACK_ACTIVE_MS", DEFAULT_GAME_CONFIG.attackActiveMs),
-  playfieldMinX: envNumber("PLAYFIELD_MIN_X", DEFAULT_GAME_CONFIG.playfieldMinX),
-  playfieldMaxX: envNumber("PLAYFIELD_MAX_X", DEFAULT_GAME_CONFIG.playfieldMaxX),
-  playfieldMinY: envNumber("PLAYFIELD_MIN_Y", DEFAULT_GAME_CONFIG.playfieldMinY),
-  playfieldMaxY: envNumber("PLAYFIELD_MAX_Y", DEFAULT_GAME_CONFIG.playfieldMaxY),
-};
+const CONFIG = buildGameConfig(process.env);
 
 const CHARACTERS = new Set(CHARACTER_IDS);
 
@@ -73,13 +45,6 @@ async function verifySocketToken(token) {
 
 function stringClaim(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function envNumber(name, fallback) {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
 }
 
 class MatchManager {
@@ -113,6 +78,7 @@ class MatchManager {
     }
 
     this.sockets.set(ws, identity);
+    ws.lastInputSeq = 0;
     const player = existing ?? this.createPlayer(identity);
     player.handle = identity.handle;
     player.roles = identity.roles;
@@ -147,6 +113,9 @@ class MatchManager {
       frozenUntil: 0,
       connected: true,
       input: emptyInput(),
+      inputWindowStartedAt: Date.now(),
+      inputWindowCount: 0,
+      droppedInputs: 0,
       attackCooldownUntil: 0,
       attackActiveUntil: 0,
       score: 0,
@@ -208,7 +177,7 @@ class MatchManager {
 
     if (msg.type === "input") {
       const player = this.players.get(identity.playerId);
-      if (player) player.input = sanitizeInput(msg.input);
+      if (player) this.acceptInput(ws, player, msg.input);
       return;
     }
 
@@ -220,6 +189,30 @@ class MatchManager {
     if (msg.type === "end_match") {
       this.endMatch(identity, "ended_early");
     }
+  }
+
+  acceptInput(ws, player, rawInput) {
+    const input = sanitizeInput(rawInput);
+    const now = Date.now();
+
+    if (input.seq <= (ws.lastInputSeq ?? 0)) {
+      player.droppedInputs += 1;
+      return;
+    }
+
+    if (now - player.inputWindowStartedAt >= 1000) {
+      player.inputWindowStartedAt = now;
+      player.inputWindowCount = 0;
+    }
+
+    player.inputWindowCount += 1;
+    if (player.inputWindowCount > CONFIG.maxInputMessagesPerSecond) {
+      player.droppedInputs += 1;
+      return;
+    }
+
+    ws.lastInputSeq = input.seq;
+    player.input = input;
   }
 
   startMatch(identity, ws) {
@@ -267,6 +260,9 @@ class MatchManager {
         damageTaken: 0,
         hamsCollected: 0,
         chestsOpened: 0,
+        inputWindowStartedAt: now,
+        inputWindowCount: 0,
+        droppedInputs: 0,
         joinedAt: new Date(),
       });
     }
@@ -509,7 +505,7 @@ class MatchManager {
     try {
       const sql = postgres(process.env.DATABASE_URL, { max: 1 });
       const [match] = await sql`
-        insert into roundtable_matches (
+        insert into melee_matches (
           id,
           status,
           started_by_player_id,
@@ -538,7 +534,7 @@ class MatchManager {
         const player = this.players.get(row.playerId);
         if (!player) continue;
         await sql`
-          insert into roundtable_match_players (
+          insert into melee_match_players (
             match_id,
             player_id,
             character_id,
@@ -659,8 +655,9 @@ function emptyInput() {
 }
 
 function sanitizeInput(input) {
+  const seq = Number(input?.seq);
   return {
-    seq: Number.isFinite(input?.seq) ? input.seq : 0,
+    seq: Number.isSafeInteger(seq) && seq > 0 ? seq : 0,
     up: Boolean(input?.up),
     down: Boolean(input?.down),
     left: Boolean(input?.left),

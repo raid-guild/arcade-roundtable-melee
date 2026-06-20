@@ -4,8 +4,8 @@
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.players": {
-      "name": "players",
+    "public.melee_players": {
+      "name": "melee_players",
       "schema": "",
       "columns": {
         "id": {
@@ -64,8 +64,8 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "players_portal_user_id_unique": {
-          "name": "players_portal_user_id_unique",
+        "melee_players_portal_user_id_unique": {
+          "name": "melee_players_portal_user_id_unique",
           "nullsNotDistinct": false,
           "columns": [
             "portal_user_id"
@@ -76,8 +76,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.roundtable_match_players": {
-      "name": "roundtable_match_players",
+    "public.melee_match_players": {
+      "name": "melee_match_players",
       "schema": "",
       "columns": {
         "id": {
@@ -161,8 +161,8 @@
         }
       },
       "indexes": {
-        "roundtable_match_players_match_idx": {
-          "name": "roundtable_match_players_match_idx",
+        "melee_match_players_match_idx": {
+          "name": "melee_match_players_match_idx",
           "columns": [
             {
               "expression": "match_id",
@@ -176,8 +176,8 @@
           "method": "btree",
           "with": {}
         },
-        "roundtable_match_players_score_idx": {
-          "name": "roundtable_match_players_score_idx",
+        "melee_match_players_score_idx": {
+          "name": "melee_match_players_score_idx",
           "columns": [
             {
               "expression": "score",
@@ -193,10 +193,10 @@
         }
       },
       "foreignKeys": {
-        "roundtable_match_players_match_id_roundtable_matches_id_fk": {
-          "name": "roundtable_match_players_match_id_roundtable_matches_id_fk",
-          "tableFrom": "roundtable_match_players",
-          "tableTo": "roundtable_matches",
+        "melee_match_players_match_id_melee_matches_id_fk": {
+          "name": "melee_match_players_match_id_melee_matches_id_fk",
+          "tableFrom": "melee_match_players",
+          "tableTo": "melee_matches",
           "columnsFrom": [
             "match_id"
           ],
@@ -206,10 +206,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "roundtable_match_players_player_id_players_id_fk": {
-          "name": "roundtable_match_players_player_id_players_id_fk",
-          "tableFrom": "roundtable_match_players",
-          "tableTo": "players",
+        "melee_match_players_player_id_players_id_fk": {
+          "name": "melee_match_players_player_id_players_id_fk",
+          "tableFrom": "melee_match_players",
+          "tableTo": "melee_players",
           "columnsFrom": [
             "player_id"
           ],
@@ -226,8 +226,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.roundtable_matches": {
-      "name": "roundtable_matches",
+    "public.melee_matches": {
+      "name": "melee_matches",
       "schema": "",
       "columns": {
         "id": {
@@ -294,8 +294,8 @@
         }
       },
       "indexes": {
-        "roundtable_matches_status_idx": {
-          "name": "roundtable_matches_status_idx",
+        "melee_matches_status_idx": {
+          "name": "melee_matches_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -309,8 +309,8 @@
           "method": "btree",
           "with": {}
         },
-        "roundtable_matches_ended_at_idx": {
-          "name": "roundtable_matches_ended_at_idx",
+        "melee_matches_ended_at_idx": {
+          "name": "melee_matches_ended_at_idx",
           "columns": [
             {
               "expression": "ended_at",
@@ -326,10 +326,10 @@
         }
       },
       "foreignKeys": {
-        "roundtable_matches_started_by_player_id_players_id_fk": {
-          "name": "roundtable_matches_started_by_player_id_players_id_fk",
-          "tableFrom": "roundtable_matches",
-          "tableTo": "players",
+        "melee_matches_started_by_player_id_players_id_fk": {
+          "name": "melee_matches_started_by_player_id_players_id_fk",
+          "tableFrom": "melee_matches",
+          "tableTo": "melee_players",
           "columnsFrom": [
             "started_by_player_id"
           ],
@@ -339,10 +339,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "roundtable_matches_ended_by_player_id_players_id_fk": {
-          "name": "roundtable_matches_ended_by_player_id_players_id_fk",
-          "tableFrom": "roundtable_matches",
-          "tableTo": "players",
+        "melee_matches_ended_by_player_id_players_id_fk": {
+          "name": "melee_matches_ended_by_player_id_players_id_fk",
+          "tableFrom": "melee_matches",
+          "tableTo": "melee_players",
           "columnsFrom": [
             "ended_by_player_id"
           ],

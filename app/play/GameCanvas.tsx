@@ -32,13 +32,31 @@ interface SpriteSheet {
 
 interface VisualEffect {
   id: string;
-  kind: "score" | "damage" | "impact";
+  kind: "score" | "damage" | "impact" | "thaw" | "chest";
   text: string;
   x: number;
   y: number;
   color: string;
   createdAt: number;
   durationMs: number;
+}
+
+type AudioCue =
+  | "ui"
+  | "attack"
+  | "hit"
+  | "score"
+  | "damage"
+  | "pickup"
+  | "chest"
+  | "freeze"
+  | "thaw"
+  | "start"
+  | "end";
+
+interface ArcadeAudio {
+  resume: () => Promise<void>;
+  play: (cue: AudioCue) => void;
 }
 
 const TOP_CHROME = 50;
@@ -55,12 +73,21 @@ export default function GameCanvas() {
   const itemSpritesRef = useRef<SpriteSheet | null>(null);
   const characterSpritesRef = useRef<Partial<Record<CharacterId, SpriteSheet>>>({});
   const reconnectRef = useRef<number | null>(null);
+  const shouldReconnectRef = useRef(true);
+  const reconnectAttemptsRef = useRef(0);
+  const noticeRef = useRef<number | null>(null);
   const effectsRef = useRef<VisualEffect[]>([]);
+  const audioRef = useRef<ArcadeAudio | null>(null);
 
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [snapshot, setSnapshot] = useState<MatchSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "reconnecting">(
+    "connecting"
+  );
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   const localPlayer = useMemo(() => {
     if (!snapshot?.localPlayerId) return null;
@@ -74,9 +101,12 @@ export default function GameCanvas() {
   }, []);
 
   const connect = useCallback(async () => {
+    if (!shouldReconnectRef.current) return;
+    setConnectionState(reconnectAttemptsRef.current > 0 ? "reconnecting" : "connecting");
     try {
       const tokenRes = await fetch("/api/game/socket-token");
       if (!tokenRes.ok) {
+        setConnectionState("connecting");
         setError("Portal session required. Launch from the Portal again.");
         return;
       }
@@ -88,13 +118,20 @@ export default function GameCanvas() {
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
+        const rejoined = reconnectAttemptsRef.current > 0;
+        reconnectAttemptsRef.current = 0;
         setConnected(true);
+        setConnectionState("connected");
         setError(null);
+        if (rejoined) {
+          showNotice("REJOINED CURRENT MATCH");
+          audioRef.current?.play("ui");
+        }
       });
       socket.addEventListener("message", (event) => {
         const message = JSON.parse(String(event.data)) as ServerMessage;
         if (message.type === "snapshot") {
-          collectEffects(snapshotRef.current, message, effectsRef.current);
+          collectEffects(snapshotRef.current, message, effectsRef.current, audioRef.current);
           snapshotRef.current = message;
           setSnapshot(message);
         }
@@ -102,18 +139,32 @@ export default function GameCanvas() {
       });
       socket.addEventListener("close", () => {
         setConnected(false);
+        if (!shouldReconnectRef.current) return;
+        reconnectAttemptsRef.current += 1;
+        setConnectionState("reconnecting");
+        showNotice("CONNECTION LOST. REJOINING...");
         if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
+        const delay = Math.min(5000, 1200 + reconnectAttemptsRef.current * 400);
         reconnectRef.current = window.setTimeout(() => {
           void connect();
-        }, 1600);
+        }, delay);
       });
     } catch {
       setConnected(false);
-      setError("Could not connect to the roundtable.");
+      if (!shouldReconnectRef.current) return;
+      reconnectAttemptsRef.current += 1;
+      setConnectionState("reconnecting");
+      setError("Could not connect to the roundtable. Retrying...");
+      if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
+      const delay = Math.min(5000, 1200 + reconnectAttemptsRef.current * 400);
+      reconnectRef.current = window.setTimeout(() => {
+        void connect();
+      }, delay);
     }
   }, []);
 
   useEffect(() => {
+    shouldReconnectRef.current = true;
     fetch("/api/session")
       .then((res) => res.json())
       .then((data: SessionResponse) => setSession(data))
@@ -121,7 +172,9 @@ export default function GameCanvas() {
     void connect();
 
     return () => {
+      shouldReconnectRef.current = false;
       if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
+      if (noticeRef.current) window.clearTimeout(noticeRef.current);
       socketRef.current?.close();
     };
   }, [connect]);
@@ -154,7 +207,10 @@ export default function GameCanvas() {
       if (event.code === "ArrowDown") inputRef.current.down = true;
       if (event.code === "ArrowLeft") inputRef.current.left = true;
       if (event.code === "ArrowRight") inputRef.current.right = true;
-      if (event.code === "Space" && !event.repeat) inputRef.current.attack = true;
+      if (event.code === "Space" && !event.repeat) {
+        inputRef.current.attack = true;
+        audioRef.current?.play("attack");
+      }
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (!trackedKey(event.code)) return;
@@ -221,6 +277,25 @@ export default function GameCanvas() {
 
   const chooseCharacter = (characterId: CharacterId) => {
     send({ type: "select_character", characterId });
+    audioRef.current?.play("ui");
+  };
+
+  const showNotice = (message: string) => {
+    setNotice(message);
+    if (noticeRef.current) window.clearTimeout(noticeRef.current);
+    noticeRef.current = window.setTimeout(() => setNotice(null), 2200);
+  };
+
+  const toggleSound = async () => {
+    if (!soundEnabled) {
+      if (!audioRef.current) audioRef.current = createArcadeAudio();
+      await audioRef.current.resume();
+      audioRef.current.play("ui");
+      setSoundEnabled(true);
+      return;
+    }
+    setSoundEnabled(false);
+    audioRef.current = null;
   };
 
   const phase = snapshot?.phase ?? "idle";
@@ -235,6 +310,12 @@ export default function GameCanvas() {
       (snapshot.phase === "lobby" || snapshot.phase === "running") &&
       !localPlayer?.characterId
   );
+  const connectionLabel =
+    connectionState === "connected"
+      ? "CONNECTED"
+      : connectionState === "reconnecting"
+        ? "REJOINING"
+        : "CONNECTING";
 
   return (
     <div className="stage">
@@ -242,17 +323,26 @@ export default function GameCanvas() {
 
       <div className="hud">
         <div className="hud__status">
-          {connected ? "CONNECTED" : "CONNECTING"}
+          {connectionLabel}
           {session?.handle ? ` | ${session.handle.toUpperCase()}` : ""}
         </div>
         <div className="hud__actions">
+          <button type="button" onClick={() => void toggleSound()}>
+            {soundEnabled ? "SOUND ON" : "SOUND"}
+          </button>
           {canStart && (
-            <button type="button" onClick={() => send({ type: "start_match" })}>
+            <button type="button" onClick={() => {
+              audioRef.current?.play("start");
+              send({ type: "start_match" });
+            }}>
               START
             </button>
           )}
           {canEnd && (
-            <button type="button" onClick={() => send({ type: "end_match" })}>
+            <button type="button" onClick={() => {
+              audioRef.current?.play("end");
+              send({ type: "end_match" });
+            }}>
               END
             </button>
           )}
@@ -315,6 +405,7 @@ export default function GameCanvas() {
       )}
 
       {error && <div className="toast">{error}</div>}
+      {!error && notice && <div className="toast toast--notice">{notice}</div>}
     </div>
   );
 }
@@ -382,11 +473,16 @@ function render(
 function collectEffects(
   previous: MatchSnapshot | null,
   next: MatchSnapshot,
-  effects: VisualEffect[]
+  effects: VisualEffect[],
+  audio: ArcadeAudio | null
 ) {
   if (!previous || previous.matchId !== next.matchId) return;
   const oldPlayers = new Map(previous.players.map((player) => [player.id, player]));
+  const oldPickups = new Map(previous.pickups.map((pickup) => [pickup.id, pickup]));
   const now = Date.now();
+
+  if (previous.phase === "lobby" && next.phase === "running") audio?.play("start");
+  if (previous.phase === "running" && next.phase === "ended") audio?.play("end");
 
   for (const player of next.players) {
     const old = oldPlayers.get(player.id);
@@ -394,6 +490,7 @@ function collectEffects(
 
     const scoreDelta = player.score - old.score;
     if (scoreDelta !== 0) {
+      audio?.play(scoreDelta > 0 ? "score" : "damage");
       effects.push({
         id: crypto.randomUUID(),
         kind: "score",
@@ -408,6 +505,7 @@ function collectEffects(
 
     const damageDelta = old.health - player.health;
     if (damageDelta > 0 && player.status === "alive") {
+      audio?.play("hit");
       effects.push({
         id: crypto.randomUUID(),
         kind: "damage",
@@ -429,12 +527,159 @@ function collectEffects(
         durationMs: 260,
       });
     }
+
+    if (player.health > old.health && player.status === "alive" && old.status === "alive") {
+      audio?.play("pickup");
+    }
+
+    if (old.status === "alive" && player.status === "frozen") {
+      audio?.play("freeze");
+    }
+
+    if (old.status === "frozen" && player.status === "alive") {
+      audio?.play("thaw");
+      effects.push({
+        id: crypto.randomUUID(),
+        kind: "thaw",
+        text: "THAW",
+        x: player.x,
+        y: player.y - 18,
+        color: "#6fd3ff",
+        createdAt: now,
+        durationMs: 760,
+      });
+    }
+  }
+
+  for (const pickup of oldPickups.values()) {
+    if (
+      next.phase === "running" &&
+      pickup.kind === "chest" &&
+      !next.pickups.some((nextPickup) => nextPickup.id === pickup.id)
+    ) {
+      audio?.play("chest");
+      effects.push({
+        id: crypto.randomUUID(),
+        kind: "chest",
+        text: "+",
+        x: pickup.x,
+        y: pickup.y - 6,
+        color: "#f3cf63",
+        createdAt: now,
+        durationMs: 720,
+      });
+    }
   }
 
   const cutoff = now - 1400;
   while (effects.length > 80 || (effects[0] && effects[0].createdAt < cutoff)) {
     effects.shift();
   }
+}
+
+function createArcadeAudio(): ArcadeAudio {
+  const audioWindow = window as typeof window & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+  const AudioContextClass = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+  if (!AudioContextClass) {
+    return {
+      resume: async () => {},
+      play: () => {},
+    };
+  }
+  const ctx = new AudioContextClass();
+  const master = ctx.createGain();
+  master.gain.value = 0.08;
+  master.connect(ctx.destination);
+
+  const tone = (
+    frequency: number,
+    duration: number,
+    type: OscillatorType = "square",
+    volume = 1,
+    when = ctx.currentTime
+  ) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, when);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(36, frequency * 0.55), when + duration);
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(volume, when + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(when);
+    osc.stop(when + duration + 0.025);
+  };
+
+  const noise = (duration: number, volume = 0.7) => {
+    const sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < sampleCount; i += 1) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / sampleCount);
+    }
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(master);
+    source.start();
+  };
+
+  const play = (cue: AudioCue) => {
+    if (ctx.state === "suspended") void ctx.resume();
+    const now = ctx.currentTime;
+    if (cue === "ui") tone(740, 0.055, "square", 0.55, now);
+    if (cue === "attack") {
+      tone(520, 0.055, "sawtooth", 0.65, now);
+      noise(0.035, 0.25);
+    }
+    if (cue === "hit") {
+      noise(0.065, 0.75);
+      tone(130, 0.07, "square", 0.45, now);
+    }
+    if (cue === "score") {
+      tone(660, 0.07, "square", 0.55, now);
+      tone(990, 0.09, "square", 0.45, now + 0.055);
+    }
+    if (cue === "damage") tone(180, 0.12, "sawtooth", 0.55, now);
+    if (cue === "pickup") {
+      tone(820, 0.045, "square", 0.5, now);
+      tone(1240, 0.065, "square", 0.42, now + 0.04);
+    }
+    if (cue === "chest") {
+      noise(0.11, 0.6);
+      tone(330, 0.08, "square", 0.55, now);
+      tone(720, 0.08, "square", 0.4, now + 0.06);
+    }
+    if (cue === "freeze") {
+      tone(760, 0.16, "triangle", 0.45, now);
+      tone(380, 0.18, "triangle", 0.35, now + 0.04);
+    }
+    if (cue === "thaw") {
+      tone(420, 0.055, "square", 0.42, now);
+      tone(640, 0.065, "square", 0.42, now + 0.045);
+    }
+    if (cue === "start") {
+      tone(440, 0.08, "square", 0.5, now);
+      tone(660, 0.08, "square", 0.5, now + 0.07);
+      tone(880, 0.12, "square", 0.5, now + 0.14);
+    }
+    if (cue === "end") {
+      tone(880, 0.08, "square", 0.45, now);
+      tone(550, 0.11, "square", 0.45, now + 0.08);
+      tone(330, 0.14, "square", 0.45, now + 0.18);
+    }
+  };
+
+  return {
+    resume: () => ctx.resume(),
+    play,
+  };
 }
 
 function drawArena(ctx: CanvasRenderingContext2D, arena: HTMLImageElement | null) {
@@ -705,11 +950,52 @@ function drawEffects(
       ctx.strokeRect(effect.x - 16 - t * 6, effect.y - 20 - t * 6, 32 + t * 12, 34 + t * 12);
     } else if (effect.kind === "impact") {
       drawImpactFlash(ctx, effect.x, effect.y, t, effect.color);
+    } else if (effect.kind === "thaw") {
+      drawThawBurst(ctx, effect.x, effect.y, t, effect.color);
+      ctx.fillText(effect.text, effect.x, y - 6);
+    } else if (effect.kind === "chest") {
+      drawChestBreak(ctx, effect.x, effect.y, t, effect.color);
     } else {
       ctx.fillText(effect.text, effect.x, y);
     }
     ctx.globalAlpha = 1;
   }
+}
+
+function drawThawBurst(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  color: string
+) {
+  const r = 12 + t * 22;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - r / 2, y - r / 2, r, r);
+  ctx.strokeRect(x - r * 0.35, y - r * 0.8, r * 0.7, r * 1.6);
+}
+
+function drawChestBreak(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  color: string
+) {
+  const spread = 8 + t * 24;
+  ctx.fillStyle = color;
+  for (const [dx, dy] of [
+    [-1, -0.6],
+    [1, -0.7],
+    [-0.55, 0.75],
+    [0.65, 0.6],
+    [0, -1],
+  ]) {
+    ctx.fillRect(x + dx * spread - 2, y + dy * spread - 2, 4, 4);
+  }
+  ctx.strokeStyle = "#fff2a6";
+  ctx.strokeRect(x - spread * 0.55, y - spread * 0.45, spread * 1.1, spread * 0.9);
 }
 
 function drawImpactFlash(

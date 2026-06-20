@@ -330,6 +330,10 @@ button {
   color: var(--red);
 }
 
+.toast--notice {
+  color: var(--gold);
+}
+
 @media (max-width: 720px) {
   .score-guide,
   .controls-guide,
