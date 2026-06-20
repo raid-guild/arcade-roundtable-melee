@@ -4,8 +4,8 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "preDeployCommand": "if [ -n \"$DATABASE_URL\" ]; then npm run db:migrate; else echo \"Skipping migrations: DATABASE_URL is not set\"; fi",
-    "startCommand": "HOSTNAME=0.0.0.0 node server/index.mjs",
+    "preDeployCommand": "export NODE_ENV=production; if [ -n \"$DATABASE_URL\" ]; then npm run db:migrate; else echo \"Skipping migrations: DATABASE_URL is not set\"; fi",
+    "startCommand": "NODE_ENV=production HOSTNAME=0.0.0.0 node server/index.mjs",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }

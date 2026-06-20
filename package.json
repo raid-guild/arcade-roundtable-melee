@@ -8,9 +8,9 @@
   },
   "scripts": {
     "dev": "node server/index.mjs",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "postbuild": "mkdir -p .next/standalone/.next && cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && mkdir -p .next/standalone/server .next/standalone/game/shared && cp server/index.mjs .next/standalone/server/ && cp game/shared/config-values.mjs .next/standalone/game/shared/",
-    "start": "node server/index.mjs",
+    "start": "NODE_ENV=production node server/index.mjs",
     "typecheck": "tsc --noEmit",
     "bots": "node scripts/socket-bots.mjs",
     "assets": "node assets-src/build-approved-art.mjs",
