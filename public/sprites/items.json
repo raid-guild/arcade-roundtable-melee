@@ -1,0 +1,13 @@
+{
+  "cell": {
+    "w": 48,
+    "h": 48
+  },
+  "names": [
+    "ham",
+    "chest-closed",
+    "chest-damaged",
+    "chest-open"
+  ],
+  "source": "assets-src/art-review/items-v1-chroma.png"
+}

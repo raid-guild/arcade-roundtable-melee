@@ -1,0 +1,40 @@
+{
+  "name": "roundtable-melee",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "dev": "node server/index.mjs",
+    "build": "next build",
+    "postbuild": "mkdir -p .next/standalone/.next && cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && mkdir -p .next/standalone/server .next/standalone/game/shared && cp server/index.mjs .next/standalone/server/ && cp game/shared/config-values.mjs .next/standalone/game/shared/",
+    "start": "node server/index.mjs",
+    "typecheck": "tsc --noEmit",
+    "assets": "node assets-src/build-approved-art.mjs",
+    "sprites": "npm run assets",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@next/env": "^15.5.19",
+    "drizzle-kit": "^0.30.6",
+    "drizzle-orm": "^0.38.0",
+    "iron-session": "^8.0.4",
+    "jose": "^5.9.6",
+    "next": "^15.1.0",
+    "postgres": "^3.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.5.13",
+    "sharp": "^0.35.2",
+    "typescript": "^5.7.0"
+  }
+}
