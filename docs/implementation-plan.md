@@ -228,8 +228,8 @@ Player flow:
 
 ## Configuration
 
-Put gameplay knobs in a single shared config file, with environment overrides
-where useful:
+Put gameplay knobs in a single shared config file so tuning changes are
+reviewable and deploy with the app:
 
 ```ts
 export const GAME_CONFIG = {
@@ -251,11 +251,19 @@ export const GAME_CONFIG = {
   maxActiveChests: 2,
   chestMinHits: 3,
   chestMaxHits: 5,
+  attackDamage: 25,
+  attackCooldownMs: 580,
+  attackActiveMs: 150,
+  maxInputMessagesPerSecond: 45,
+  playfieldMinX: 46,
+  playfieldMaxX: 674,
+  playfieldMinY: 126,
+  playfieldMaxY: 486,
 };
 ```
 
 Admin controls can expose match duration, lobby countdown, scoring, and spawn
-rates later, but v1 only needs the constants to be easy to change.
+rates later, but v1 keeps gameplay tuning in `game/shared/config-values.mjs`.
 
 ## Database Model
 
@@ -741,8 +749,6 @@ Deployment should provide:
 - `MODULE_SLUG`.
 - `PORTAL_MODULES_URL`.
 - `SOCKET_TOKEN_SECRET`, unless the session secret is deliberately reused.
-- optional game config env vars for lobby duration, match duration, scoring, and
-  spawn ranges.
 
 Deployment flow:
 
@@ -794,8 +800,7 @@ Current implementation notes from the June 20, 2026 review:
   results overlay, recent results page, and Railway service configuration.
 - Shared config defaults now live in `game/shared/config-values.mjs`, with the
   TypeScript app config and custom websocket server both reading from those
-  defaults. Server-side environment overrides remain authoritative for runtime
-  tuning.
+  values. Gameplay tuning changes are made in code and deployed with the app.
 - Ended matches now hold final results briefly, then reset to `idle` and prune
   disconnected players so stale sessions do not permanently fill the match.
 - Match persistence no longer marks a match as persisted before the database
@@ -809,7 +814,7 @@ Current implementation notes from the June 20, 2026 review:
 - The current migration is the pre-deploy baseline. No rename migration is
   needed because the app has not yet been deployed against the shared arcade DB.
 - Runtime gameplay config is exposed at `GET /api/game/config`, and server-side
-  UI reads from the same env-aware config parser as the websocket server.
+  UI reads from the same committed config values as the websocket server.
 - Current melee slash/swipe overlays are accepted for V1 playtesting; attack
   pose art can be revisited after multiplayer feedback.
 - Crunchy arcade-style sound effects are implemented with a lightweight

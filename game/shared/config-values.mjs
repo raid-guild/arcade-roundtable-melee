@@ -1,5 +1,5 @@
-export const DEFAULT_GAME_CONFIG = Object.freeze({
-  lobbyCountdownSeconds: 15,
+export const GAME_CONFIG_VALUES = Object.freeze({
+  lobbyCountdownSeconds: 7,
   matchDurationSeconds: 180,
   finalResultsSeconds: 30,
   maxPlayers: 10,
@@ -32,51 +32,11 @@ export const DEFAULT_GAME_CONFIG = Object.freeze({
   playfieldMinX: 46,
   playfieldMaxX: 674,
   playfieldMinY: 126,
-  playfieldMaxY: 574,
+  playfieldMaxY: 486,
 });
 
-const ENV_KEYS = Object.freeze({
-  lobbyCountdownSeconds: "LOBBY_COUNTDOWN_SECONDS",
-  matchDurationSeconds: "MATCH_DURATION_SECONDS",
-  finalResultsSeconds: "FINAL_RESULTS_SECONDS",
-  maxPlayers: "MAX_PLAYERS",
-  freezeSeconds: "FREEZE_SECONDS",
-  playerMaxHealth: "PLAYER_MAX_HEALTH",
-  playerSpeed: "PLAYER_SPEED",
-  hamHealAmount: "HAM_HEAL_AMOUNT",
-  slayScore: "SLAY_SCORE",
-  deathScore: "DEATH_SCORE",
-  chestScore: "CHEST_SCORE",
-  hamSpawnMinSeconds: "HAM_SPAWN_MIN_SECONDS",
-  hamSpawnMaxSeconds: "HAM_SPAWN_MAX_SECONDS",
-  maxActiveHams: "MAX_ACTIVE_HAMS",
-  chestSpawnMinSeconds: "CHEST_SPAWN_MIN_SECONDS",
-  chestSpawnMaxSeconds: "CHEST_SPAWN_MAX_SECONDS",
-  maxActiveChests: "MAX_ACTIVE_CHESTS",
-  chestMinHits: "CHEST_MIN_HITS",
-  chestMaxHits: "CHEST_MAX_HITS",
-  attackDamage: "ATTACK_DAMAGE",
-  attackCooldownMs: "ATTACK_COOLDOWN_MS",
-  attackActiveMs: "ATTACK_ACTIVE_MS",
-  maxInputMessagesPerSecond: "MAX_INPUT_MESSAGES_PER_SECOND",
-  playfieldMinX: "PLAYFIELD_MIN_X",
-  playfieldMaxX: "PLAYFIELD_MAX_X",
-  playfieldMinY: "PLAYFIELD_MIN_Y",
-  playfieldMaxY: "PLAYFIELD_MAX_Y",
-});
-
-export function buildGameConfig(env = {}) {
-  const config = { ...DEFAULT_GAME_CONFIG };
-  for (const [configKey, envKey] of Object.entries(ENV_KEYS)) {
-    config[configKey] = envNumber(env[envKey], DEFAULT_GAME_CONFIG[configKey]);
-  }
-  return Object.freeze(config);
-}
-
-function envNumber(raw, fallback) {
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
+export function buildGameConfig() {
+  return GAME_CONFIG_VALUES;
 }
 
 export const CHARACTER_IDS = Object.freeze([

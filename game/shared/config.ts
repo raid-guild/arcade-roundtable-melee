@@ -1,4 +1,4 @@
-import { CHARACTER_IDS, DEFAULT_GAME_CONFIG } from "./config-values.mjs";
+import { CHARACTER_IDS, GAME_CONFIG_VALUES } from "./config-values.mjs";
 
 export type GameConfig = {
   readonly lobbyCountdownSeconds: number;
@@ -37,7 +37,7 @@ export type GameConfig = {
   readonly playfieldMaxY: number;
 };
 
-export const GAME_CONFIG = DEFAULT_GAME_CONFIG as GameConfig;
+export const GAME_CONFIG = GAME_CONFIG_VALUES as GameConfig;
 
 export const LOGICAL_W = GAME_CONFIG.arenaWidth + GAME_CONFIG.leaderboardWidth;
 export const LOGICAL_H = GAME_CONFIG.arenaHeight;

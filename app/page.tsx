@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function StartScreen() {
   const session = await getOptionalSession();
   const showDevLogin = devLoginEnabled();
-  const config = buildGameConfig(process.env);
+  const config = buildGameConfig();
 
   return (
     <main className="screen">
