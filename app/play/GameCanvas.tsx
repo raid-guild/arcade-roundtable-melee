@@ -752,13 +752,6 @@ function drawPlayer(
     }
   }
 
-  if (player.status === "frozen") {
-    ctx.fillStyle = "rgba(111, 211, 255, 0.64)";
-    ctx.fillRect(x - 17, y - 34, 34, 46);
-    ctx.strokeStyle = "#d9f7ff";
-    ctx.strokeRect(x - 17, y - 34, 34, 46);
-  }
-
   if (player.status === "disconnected") {
     ctx.fillStyle = "rgba(120, 151, 180, 0.68)";
     ctx.fillRect(x - 17, y - 34, 34, 46);

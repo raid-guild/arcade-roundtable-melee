@@ -1,6 +1,6 @@
 export const GAME_CONFIG_VALUES = Object.freeze({
   lobbyCountdownSeconds: 7,
-  matchDurationSeconds: 180,
+  matchDurationSeconds: 90,
   finalResultsSeconds: 30,
   maxPlayers: 10,
   freezeSeconds: 15,
